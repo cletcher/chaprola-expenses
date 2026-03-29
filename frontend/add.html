@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add Expense - Chaprola Expenses</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="logo">
+      <h1>Chaprola</h1>
+      <span>Expenses</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="index.html">Dashboard</a></li>
+      <li><a href="add.html" class="active">Add Expense</a></li>
+      <li><a href="list.html">Expense List</a></li>
+      <li><a href="export.html">Export</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+    <header class="page-header">
+      <h2>Add New Expense</h2>
+      <p class="subtitle">Submit an expense for approval</p>
+    </header>
+
+    <section>
+      <form class="form-container" onsubmit="submitExpense(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="amount">Amount *</label>
+            <input type="number" id="amount" name="amount" step="0.01" min="0" required placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label for="date">Date *</label>
+            <input type="date" id="date" name="date" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="category">Category *</label>
+          <select id="category" name="category" required>
+            <option value="">Select a category...</option>
+            <option value="Software & Subscriptions">Software & Subscriptions</option>
+            <option value="Office Supplies">Office Supplies</option>
+            <option value="Travel">Travel</option>
+            <option value="Meals & Entertainment">Meals & Entertainment</option>
+            <option value="Equipment">Equipment</option>
+            <option value="Training & Education">Training & Education</option>
+            <option value="Marketing">Marketing</option>
+            <option value="Professional Services">Professional Services</option>
+            <option value="Utilities">Utilities</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="vendor">Vendor *</label>
+          <input type="text" id="vendor" name="vendor" required placeholder="Company or person name">
+        </div>
+
+        <div class="form-group">
+          <label for="description">Description *</label>
+          <textarea id="description" name="description" rows="3" required placeholder="Brief description of the expense"></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="payment">Payment Method</label>
+            <select id="payment" name="payment">
+              <option value="Credit Card">Credit Card</option>
+              <option value="Corporate Card">Corporate Card</option>
+              <option value="Check">Check</option>
+              <option value="Wire Transfer">Wire Transfer</option>
+              <option value="ACH">ACH</option>
+              <option value="Cash">Cash</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="submitted_by">Submitted By</label>
+            <input type="text" id="submitted_by" name="submitted_by" placeholder="Your name">
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+          <button type="submit" class="btn btn-primary">Submit Expense</button>
+          <a href="list.html" class="btn btn-secondary">Cancel</a>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+  <script>
+    // Set default date to today
+    document.getElementById('date').valueAsDate = new Date();
+  </script>
+</body>
+</html>

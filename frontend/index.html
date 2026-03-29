@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chaprola Expenses - Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="logo">
+      <h1>Chaprola</h1>
+      <span>Expenses</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="index.html" class="active">Dashboard</a></li>
+      <li><a href="add.html">Add Expense</a></li>
+      <li><a href="list.html">Expense List</a></li>
+      <li><a href="export.html">Export</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+    <header class="page-header">
+      <h2>Expense Dashboard</h2>
+      <p class="subtitle">Q1 2026 Overview</p>
+    </header>
+
+    <section class="summary-cards">
+      <div class="card total">
+        <span class="label">Total Expenses</span>
+        <span class="value" id="totalAmount">$0.00</span>
+        <span class="count" id="totalCount">0 expenses</span>
+      </div>
+      <div class="card pending">
+        <span class="label">Pending Approval</span>
+        <span class="value" id="pendingAmount">$0.00</span>
+        <span class="count" id="pendingCount">0 expenses</span>
+      </div>
+      <div class="card approved">
+        <span class="label">Approved</span>
+        <span class="value" id="approvedAmount">$0.00</span>
+        <span class="count" id="approvedCount">0 expenses</span>
+      </div>
+    </section>
+
+    <section class="category-breakdown">
+      <h3>Spending by Category</h3>
+      <div class="chart-container" id="categoryChart"></div>
+      <table class="data-table" id="categoryTable">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Amount</th>
+            <th>Count</th>
+            <th>% of Total</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="monthly-comparison">
+      <h3>Monthly Comparison</h3>
+      <table class="data-table" id="monthlyTable">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Jan 2026</th>
+            <th>Feb 2026</th>
+            <th>Mar 2026</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      loadDashboard();
+    });
+  </script>
+</body>
+</html>

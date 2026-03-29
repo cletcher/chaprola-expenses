@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Export - Chaprola Expenses</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="logo">
+      <h1>Chaprola</h1>
+      <span>Expenses</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="index.html">Dashboard</a></li>
+      <li><a href="add.html">Add Expense</a></li>
+      <li><a href="list.html">Expense List</a></li>
+      <li><a href="export.html" class="active">Export</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+    <header class="page-header">
+      <h2>Export Expenses</h2>
+      <p class="subtitle">Download expense data in various formats</p>
+    </header>
+
+    <section>
+      <h3>Date Range</h3>
+      <div class="form-row" style="max-width: 400px;">
+        <div class="form-group">
+          <label for="exportStartDate">Start Date</label>
+          <input type="date" id="exportStartDate" value="2026-01-01">
+        </div>
+        <div class="form-group">
+          <label for="exportEndDate">End Date</label>
+          <input type="date" id="exportEndDate" value="2026-03-31">
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h3>Export Format</h3>
+      <div class="export-options">
+        <div class="export-option selected" data-format="csv" onclick="selectFormat('csv')">
+          <h4>CSV</h4>
+          <p>Comma-separated values for spreadsheets</p>
+        </div>
+        <div class="export-option" data-format="json" onclick="selectFormat('json')">
+          <h4>JSON</h4>
+          <p>Structured data for integrations</p>
+        </div>
+        <div class="export-option" data-format="pdf" onclick="selectFormat('pdf')">
+          <h4>PDF</h4>
+          <p>Formatted report for printing</p>
+        </div>
+        <div class="export-option" data-format="xlsx" onclick="selectFormat('xlsx')">
+          <h4>Excel</h4>
+          <p>Microsoft Excel workbook</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h3>Report Type</h3>
+      <div class="form-group" style="max-width: 400px;">
+        <select id="reportType">
+          <option value="DETAIL">Detailed Expense Report</option>
+          <option value="DASHBOARD">Category Summary</option>
+          <option value="MONTHLY">Monthly Cross-Tabulation</option>
+        </select>
+      </div>
+      <p class="subtitle" style="margin-top: 0.5rem;">
+        Reports are generated using Chaprola's compiled programs and exported via the /export-report endpoint.
+      </p>
+    </section>
+
+    <section>
+      <button id="exportBtn" class="btn btn-primary" onclick="exportData()">
+        Export
+      </button>
+    </section>
+
+    <section>
+      <h3>Export Pipeline</h3>
+      <div class="alert alert-info">
+        <strong>How it works:</strong> When you click Export, the proxy server calls Chaprola's <code>/export-report</code> endpoint,
+        which runs the compiled .PR program against the ledger data and generates the output file. The file is stored temporarily
+        in S3, and you receive a presigned download URL.
+      </div>
+      <table class="data-table" style="margin-top: 1rem;">
+        <thead>
+          <tr>
+            <th>Step</th>
+            <th>Chaprola Endpoint</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><code>/compile</code></td>
+            <td>Compile Chaprola source (.CS) to bytecode (.PR)</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><code>/publish</code></td>
+            <td>Make the program available for public access</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><code>/export-report</code></td>
+            <td>Run program and save output to S3 in requested format</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><code>/download</code></td>
+            <td>Get presigned URL for the generated file</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
