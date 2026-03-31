@@ -7,8 +7,8 @@
  * - Export to PDF/CSV
  */
 
-const API_BASE = '/api'; // Proxy endpoint
-const CHAPROLA_REPORT = 'https://api.chaprola.org/report';
+const CHAPROLA_API = 'https://api.chaprola.org';
+const SITE_KEY = 'site_ca371406d665f28366a96886414ece3bc987e40e7cde74dba65cf1ace1c1b1e0';
 const USERID = 'chaprola-expenses';
 const PROJECT = 'expenses';
 
@@ -39,13 +39,16 @@ function getCategoryClass(category) {
   return categoryColors[category] || 'default';
 }
 
-// Helper: API call
-async function apiCall(endpoint, method = 'POST', body = {}) {
+// Helper: API call to Chaprola
+async function chaprolaCall(endpoint, body = {}) {
   try {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: method !== 'GET' ? JSON.stringify(body) : undefined
+    const response = await fetch(`${CHAPROLA_API}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SITE_KEY}`
+      },
+      body: JSON.stringify({ userid: USERID, project: PROJECT, ...body })
     });
     if (!response.ok) {
       const error = await response.json();
@@ -63,7 +66,7 @@ async function apiCall(endpoint, method = 'POST', body = {}) {
 async function loadDashboard() {
   try {
     // Load all data via proxy query
-    const data = await apiCall('/query', 'POST', {
+    const data = await chaprolaCall('/query', {
       file: 'ledger'
     });
 
@@ -84,10 +87,10 @@ async function loadDashboard() {
     records.forEach(r => {
       const amount = parseFloat(r.amount) || 0;
       totalAmount += amount;
-      if (r.status === 'pending') {
+      if (r.state === 'pending') {
         pendingAmount += amount;
         pendingCount++;
-      } else if (r.status === 'approved') {
+      } else if (r.state === 'approved') {
         approvedAmount += amount;
         approvedCount++;
       }
@@ -157,7 +160,7 @@ async function loadDashboard() {
 
     records.forEach(r => {
       const cat = r.category;
-      const month = r.month;
+      const month = r.txmonth;
       const amount = parseFloat(r.amount) || 0;
       if (!monthlyData[cat]) {
         monthlyData[cat] = { '2026-01': 0, '2026-02': 0, '2026-03': 0, total: 0 };
@@ -243,21 +246,21 @@ async function submitExpense(event) {
 
   try {
     const formData = new FormData(form);
-    const date = formData.get('date');
+    const txdate = formData.get('txdate');
     const expense = {
-      expense_id: `EXP-${Date.now()}`,
+      expensecode: `EXP-${Date.now()}`,
       amount: parseFloat(formData.get('amount')).toFixed(2),
       category: formData.get('category'),
-      vendor: formData.get('vendor'),
-      description: formData.get('description'),
-      date: date,
-      month: date.substring(0, 7),
-      payment: formData.get('payment'),
-      status: 'pending',
-      submitted_by: formData.get('submitted_by') || 'Web User'
+      company: formData.get('company'),
+      detail: formData.get('detail'),
+      txdate: txdate,
+      txmonth: txdate.substring(0, 7),
+      method: formData.get('method'),
+      state: 'pending',
+      submitter: formData.get('submitter') || 'Web User'
     };
 
-    await apiCall('/insert', 'POST', {
+    await chaprolaCall('/insert-record', {
       file: 'ledger',
       record: expense
     });
@@ -308,9 +311,9 @@ async function loadExpenseList() {
       document.getElementById('filterMonth').value = currentFilters.month;
     }
 
-    const data = await apiCall('/query', 'POST', {
+    const data = await chaprolaCall('/query', {
       file: 'ledger',
-      order_by: [{ field: 'date', dir: 'desc' }]
+      order_by: [{ field: 'txdate', dir: 'desc' }]
     });
 
     allExpenses = data.records || [];
@@ -335,10 +338,10 @@ function renderExpenseList() {
   // Apply filters
   let filtered = allExpenses.filter(exp => {
     if (currentFilters.category && exp.category !== currentFilters.category) return false;
-    if (currentFilters.month && exp.month !== currentFilters.month) return false;
-    if (currentFilters.status && exp.status !== currentFilters.status) return false;
+    if (currentFilters.month && exp.txmonth !== currentFilters.month) return false;
+    if (currentFilters.status && exp.state !== currentFilters.status) return false;
     if (currentFilters.search) {
-      const searchStr = `${exp.vendor} ${exp.description} ${exp.submitted_by}`.toLowerCase();
+      const searchStr = `${exp.company} ${exp.detail} ${exp.submitter}`.toLowerCase();
       if (!searchStr.includes(currentFilters.search)) return false;
     }
     return true;
@@ -363,15 +366,15 @@ function renderExpenseList() {
       const colorClass = getCategoryClass(exp.category);
       return `
         <tr>
-          <td>${exp.date}</td>
+          <td>${exp.txdate}</td>
           <td><span class="category-badge ${colorClass}">${exp.category}</span></td>
-          <td>${exp.vendor}</td>
-          <td>${exp.description}</td>
+          <td>${exp.company}</td>
+          <td>${exp.detail}</td>
           <td class="amount">${formatCurrency(exp.amount)}</td>
-          <td><span class="status-badge ${exp.status}">${exp.status}</span></td>
+          <td><span class="status-badge ${exp.state}">${exp.state}</span></td>
           <td>
-            <button class="btn btn-sm btn-secondary" onclick="editExpense('${exp.expense_id}')">Edit</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteExpense('${exp.expense_id}')">Delete</button>
+            <button class="btn btn-sm btn-secondary" onclick="editExpense('${exp.expensecode}')">Edit</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteExpense('${exp.expensecode}')">Delete</button>
           </td>
         </tr>
       `;
@@ -408,13 +411,13 @@ async function deleteExpense(expenseId) {
   if (!confirm('Are you sure you want to delete this expense?')) return;
 
   try {
-    await apiCall('/delete', 'POST', {
+    await chaprolaCall('/delete-record', {
       file: 'ledger',
-      where: { expense_id: expenseId }
+      where: { expensecode: expenseId }
     });
 
     // Remove from local array and re-render
-    allExpenses = allExpenses.filter(e => e.expense_id !== expenseId);
+    allExpenses = allExpenses.filter(e => e.expensecode !== expenseId);
     renderExpenseList();
     showSuccess('Expense deleted successfully');
 
@@ -424,18 +427,18 @@ async function deleteExpense(expenseId) {
 }
 
 function editExpense(expenseId) {
-  const expense = allExpenses.find(e => e.expense_id === expenseId);
+  const expense = allExpenses.find(e => e.expensecode === expenseId);
   if (!expense) return;
 
   // Populate modal
-  document.getElementById('editExpenseId').value = expense.expense_id;
+  document.getElementById('editExpenseId').value = expense.expensecode;
   document.getElementById('editAmount').value = expense.amount;
   document.getElementById('editCategory').value = expense.category;
-  document.getElementById('editVendor').value = expense.vendor;
-  document.getElementById('editDescription').value = expense.description;
-  document.getElementById('editDate').value = expense.date;
-  document.getElementById('editPayment').value = expense.payment;
-  document.getElementById('editStatus').value = expense.status;
+  document.getElementById('editVendor').value = expense.company;
+  document.getElementById('editDescription').value = expense.detail;
+  document.getElementById('editTxdate').value = expense.txdate;
+  document.getElementById('editMethod').value = expense.method;
+  document.getElementById('editState').value = expense.state;
 
   // Show modal
   document.getElementById('editModal').classList.add('active');
@@ -451,20 +454,20 @@ async function saveExpense(event) {
 
   try {
     const expenseId = document.getElementById('editExpenseId').value;
-    const date = document.getElementById('editDate').value;
+    const txdate = document.getElementById('editTxdate').value;
 
-    await apiCall('/update', 'POST', {
+    await chaprolaCall('/update-record', {
       file: 'ledger',
-      where: { expense_id: expenseId },
+      where: { expensecode: expenseId },
       set: {
         amount: parseFloat(document.getElementById('editAmount').value).toFixed(2),
         category: document.getElementById('editCategory').value,
-        vendor: document.getElementById('editVendor').value,
-        description: document.getElementById('editDescription').value,
-        date: date,
-        month: date.substring(0, 7),
-        payment: document.getElementById('editPayment').value,
-        status: document.getElementById('editStatus').value
+        company: document.getElementById('editVendor').value,
+        detail: document.getElementById('editDescription').value,
+        txdate: txdate,
+        txmonth: txdate.substring(0, 7),
+        method: document.getElementById('editMethod').value,
+        state: document.getElementById('editState').value
       }
     });
 
@@ -498,7 +501,7 @@ async function exportData() {
     exportBtn.disabled = true;
     exportBtn.textContent = 'Generating...';
 
-    const result = await apiCall('/export-report', 'POST', {
+    const result = await chaprolaCall('/export-report', {
       name: 'DETAIL',
       format: selectedFormat,
       startDate,

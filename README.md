@@ -84,16 +84,16 @@ chaprola-expenses/
 
 | Field | Type | Width | Description |
 |-------|------|-------|-------------|
-| expense_id | string | 12 | Unique identifier (EXP-timestamp) |
+| expensecode | string | 12 | Unique identifier (EXP-timestamp) |
 | amount | string | 12 | Expense amount (e.g., "1250.00") |
 | category | string | 30 | Expense category |
-| vendor | string | 60 | Vendor/company name |
-| description | string | 100 | Brief description |
-| date | string | 10 | Expense date (YYYY-MM-DD) |
-| month | string | 7 | Month for grouping (YYYY-MM) |
-| payment | string | 20 | Payment method |
-| status | string | 10 | approved or pending |
-| submitted_by | string | 40 | Submitter name |
+| company | string | 60 | Vendor/company name |
+| detail | string | 100 | Brief detail |
+| txdate | string | 10 | Expense date (YYYY-MM-DD) |
+| txmonth | string | 7 | Month for grouping (YYYY-MM) |
+| method | string | 20 | Payment method |
+| state | string | 10 | approved or pending |
+| submitter | string | 40 | Submitter name |
 
 ### Categories
 
