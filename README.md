@@ -1,5 +1,7 @@
 # Chaprola Expenses
 
+**[Live Demo](https://chaprola.org/apps/chaprola-expenses/expenses/)**
+
 An expense tracking application built on [Chaprola](https://chaprola.org) that demonstrates the complete business data lifecycle: create records, query with aggregation, generate scheduled reports, and export to PDF/CSV.
 
 ## Features
