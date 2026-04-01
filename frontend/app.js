@@ -8,7 +8,7 @@
  */
 
 const CHAPROLA_API = 'https://api.chaprola.org';
-const SITE_KEY = 'site_ca371406d665f28366a96886414ece3bc987e40e7cde74dba65cf1ace1c1b1e0';
+const SITE_KEY = 'site_a5e1cae8c6ce82305e66546a5638703e0897300914e816d11178fde15733b974';
 const USERID = 'chaprola-expenses';
 const PROJECT = 'expenses';
 
@@ -374,7 +374,6 @@ function renderExpenseList() {
           <td><span class="status-badge ${exp.state}">${exp.state}</span></td>
           <td>
             <button class="btn btn-sm btn-secondary" onclick="editExpense('${exp.expensecode}')">Edit</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteExpense('${exp.expensecode}')">Delete</button>
           </td>
         </tr>
       `;
@@ -408,22 +407,9 @@ function changePage(page) {
 }
 
 async function deleteExpense(expenseId) {
-  if (!confirm('Are you sure you want to delete this expense?')) return;
-
-  try {
-    await chaprolaCall('/delete-record', {
-      file: 'ledger',
-      where: { expensecode: expenseId }
-    });
-
-    // Remove from local array and re-render
-    allExpenses = allExpenses.filter(e => e.expensecode !== expenseId);
-    renderExpenseList();
-    showSuccess('Expense deleted successfully');
-
-  } catch (err) {
-    showError('Failed to delete expense: ' + err.message);
-  }
+  // Note: /delete-record is not allowed for site keys
+  // This functionality is disabled in the frontend-only version
+  showError('Delete functionality requires backend proxy (not available with site keys)');
 }
 
 function editExpense(expenseId) {
