@@ -16,6 +16,7 @@
       <li><a href="index.html">Dashboard</a></li>
       <li><a href="add.html">Add Expense</a></li>
       <li><a href="list.html" class="active">Expense List</a></li>
+      <li><a href="review.html">Review Pending</a></li>
       <li><a href="export.html">Export</a></li>
     </ul>
   </nav>
@@ -30,7 +31,7 @@
       <div class="filters">
         <div class="filter-group">
           <label for="filterCategory">Category:</label>
-          <select id="filterCategory" onchange="applyFilters()">
+          <select id="filterCategory">
             <option value="">All Categories</option>
             <option value="Software & Subscriptions">Software & Subscriptions</option>
             <option value="Office Supplies">Office Supplies</option>
@@ -45,24 +46,22 @@
         </div>
         <div class="filter-group">
           <label for="filterMonth">Month:</label>
-          <select id="filterMonth" onchange="applyFilters()">
+          <select id="filterMonth">
             <option value="">All Months</option>
-            <option value="2026-01">January 2026</option>
-            <option value="2026-02">February 2026</option>
-            <option value="2026-03">March 2026</option>
           </select>
         </div>
         <div class="filter-group">
           <label for="filterStatus">Status:</label>
-          <select id="filterStatus" onchange="applyFilters()">
+          <select id="filterStatus">
             <option value="">All Status</option>
             <option value="approved">Approved</option>
             <option value="pending">Pending</option>
+            <option value="rejected">Rejected</option>
           </select>
         </div>
         <div class="filter-group">
           <label for="filterSearch">Search:</label>
-          <input type="text" id="filterSearch" placeholder="Vendor, description..." oninput="applyFilters()">
+          <input type="text" id="filterSearch" placeholder="Vendor, description...">
         </div>
         <a href="add.html" class="btn btn-primary" style="margin-left: auto;">Add Expense</a>
       </div>
@@ -93,13 +92,13 @@
   </main>
 
   <!-- Edit Modal -->
-  <div id="editModal" class="modal-overlay" onclick="if(event.target === this) closeModal()">
+  <div id="editModal" class="modal-overlay">
     <div class="modal">
       <div class="modal-header">
         <h3>Edit Expense</h3>
-        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <button id="editModalClose" class="modal-close">&times;</button>
       </div>
-      <form onsubmit="saveExpense(event)">
+      <form id="editExpenseForm">
         <input type="hidden" id="editExpenseId">
 
         <div class="form-row">
@@ -160,7 +159,7 @@
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button type="button" id="editModalCancel" class="btn btn-secondary">Cancel</button>
           <button type="submit" class="btn btn-primary">Save Changes</button>
         </div>
       </form>
@@ -168,10 +167,5 @@
   </div>
 
   <script src="app.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      loadExpenseList();
-    });
-  </script>
 </body>
 </html>

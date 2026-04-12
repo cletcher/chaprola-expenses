@@ -1,193 +1,118 @@
 # Chaprola Expenses
 
-**[Live Demo](https://chaprola.org/apps/chaprola-expenses/expenses/)**
+**Live demo:** <https://chaprola.org/apps/chaprola-expenses/expenses/>
 
-An expense tracking application built on [Chaprola](https://chaprola.org) that demonstrates the complete business data lifecycle: create records, query with aggregation, generate scheduled reports, and export to PDF/CSV.
+A team expense tracker built entirely on [Chaprola](https://chaprola.org). Static frontend, no proxy, no server code to deploy — the browser talks directly to `api.chaprola.org` with an origin-locked site key. This is app #2 in the Chaprola showcase pipeline; it proves the full CRUD → pivot → schedule → export lifecycle on a live dataset.
 
 ## Features
 
-- **Dashboard** - Category breakdown with CSS bar charts, monthly cross-tabulation
-- **Add Expense** - Form-based expense submission with validation
-- **Expense List** - Filterable, sortable list with edit/delete actions
-- **Export** - Download reports in CSV, JSON, PDF, or Excel format
+- **Dashboard** — spending by category and a category × month cross-tab, both computed server-side via `/query` pivot. Totals / pending / approved tiles update on every load.
+- **Add** — insert a pending expense via `/insert-record`.
+- **List** — filter by category, month, status, or free-text search; inline edit via `/update-record`. Month filter is populated dynamically from the data.
+- **Review** — approve or reject any `pending` expense in one click.
+- **Export** — pull expenses for a date range and download as CSV or JSON. Serialization happens in the browser from a single `/query` call.
+- **Scheduled report** — a weekly `/schedule` job runs the `SUMMARY` Chaprola program and captures the aggregated output.
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│                 │     │                 │     │                 │
-│    Frontend     │────▶│  Proxy Server   │────▶│   Chaprola API  │
-│    (Static)     │     │   (Node.js)     │     │                 │
-│                 │     │                 │     │                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-     index.html              /api/*              api.chaprola.org
-     add.html              Holds API key          /query
-     list.html              CORS handling         /insert-record
-     export.html            Authentication        /export-report
+┌─────────────────┐     ┌─────────────────┐
+│                 │     │                 │
+│ Static frontend │────▶│  api.chaprola   │
+│  (HTML/JS/CSS)  │     │      .org       │
+│                 │     │                 │
+└─────────────────┘     └─────────────────┘
+  chaprola.org/apps        /query, /insert-record,
+  /chaprola-expenses       /update-record,
+  /expenses/               /export-report, /report
 ```
 
-## Quick Start
+No Node.js server. No proxy. No admin credentials in the browser. The frontend holds a site key (`site_...`) that the Chaprola authorizer restricts by origin and endpoint allowlist. Stolen from devtools, the site key can only do the same reads and writes any visitor can already trigger from the live URL.
 
-### Prerequisites
-
-- Node.js 18+
-- Chaprola account (registered during setup)
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/your-username/chaprola-expenses.git
-cd chaprola-expenses
-
-# Set up Chaprola backend (imports data, creates indexes, compiles programs)
-export CHAPROLA_API_KEY=chp_your_api_key_here
-node setup-chaprola.js
-
-# Start the proxy server
-npm start
-
-# Open http://localhost:3000
-```
-
-### Environment Variables
-
-Create a `.env` file or set environment variables:
-
-```
-CHAPROLA_USERNAME=chaprola-expenses
-CHAPROLA_API_KEY=REDACTED_OLD_EXPENSES_KEY
-PORT=3000
-```
-
-## Project Structure
+## Project layout
 
 ```
 chaprola-expenses/
-├── frontend/               # Static frontend files
-│   ├── index.html         # Dashboard
-│   ├── add.html           # Add expense form
-│   ├── list.html          # Expense list with filters
-│   ├── export.html        # Export interface
-│   ├── styles.css         # Dashboard-style CSS
-│   └── app.js             # Frontend JavaScript
-├── proxy/
-│   └── server.js          # Node.js proxy server
-├── setup-chaprola.js      # Setup script (import data, compile programs)
-├── package.json
-├── COOKBOOK.md            # Chaprola patterns reference
-├── LESSONS.md             # Development insights
-└── README.md
+├── frontend/               # Static app deployed to chaprola.org
+│   ├── index.html          # Dashboard
+│   ├── add.html            # Add expense form
+│   ├── list.html           # Filterable list + edit modal
+│   ├── review.html         # Approve / reject pending
+│   ├── export.html         # CSV / JSON download
+│   ├── styles.css
+│   └── app.js
+├── chaprola/               # Chaprola language source
+│   ├── DETAIL.CS           # Parameterized detail report
+│   ├── DETAIL.DS           # Intent for DETAIL
+│   ├── SUMMARY.CS          # Weekly rollup (used by the scheduled job)
+│   └── SUMMARY.DS          # Intent for SUMMARY
+├── setup-chaprola.js       # One-time bootstrap: import seed, compile, publish
+├── COOKBOOK.md             # Patterns and gotchas discovered while building
+├── LESSONS.md              # Platform defects and doc gaps surfaced
+└── README.md               # This file
 ```
 
-## Data Model
+## Data model
 
-### ledger (One record per expense)
+One file — `ledger` — one record per expense.
 
-| Field | Type | Width | Description |
-|-------|------|-------|-------------|
-| expensecode | string | 12 | Unique identifier (EXP-timestamp) |
-| amount | string | 12 | Expense amount (e.g., "1250.00") |
-| category | string | 30 | Expense category |
-| company | string | 60 | Vendor/company name |
-| detail | string | 100 | Brief detail |
-| txdate | string | 10 | Expense date (YYYY-MM-DD) |
-| txmonth | string | 7 | Month for grouping (YYYY-MM) |
-| method | string | 20 | Payment method |
-| state | string | 10 | approved or pending |
-| submitter | string | 40 | Submitter name |
+| Field         | Type   | Width | Description                                |
+|---------------|--------|-------|--------------------------------------------|
+| `expensecode` | string |    20 | Unique identifier (`EXP-YYMMDD-NNNN`)      |
+| `amount`      | string |    12 | Dollar amount as text                      |
+| `category`    | string |    24 | One of nine canonical categories           |
+| `company`     | string |    60 | Vendor or payee                            |
+| `detail`      | string |    40 | Short free-text description                |
+| `txdate`      | string |    10 | Transaction date (`YYYY-MM-DD`)            |
+| `txmonth`     | string |     7 | Derived grouping month (`YYYY-MM`)         |
+| `method`      | string |    14 | Payment method                             |
+| `state`       | string |     8 | `pending`, `approved`, or `rejected`       |
+| `submitter`   | string |    40 | Who submitted the expense                  |
 
-### Categories
+Field names avoid common PHI triggers (no `name`, `id`, `date`, `phone`, etc.) because Chaprola's ingest-time PHI detector is substring-based. See `LESSONS.md`.
 
-- Software & Subscriptions
-- Office Supplies
-- Travel
-- Meals & Entertainment
-- Equipment
-- Training & Education
-- Marketing
-- Professional Services
-- Utilities
+## Chaprola programs
 
-## Chaprola Programs
+| Program      | Purpose                                                                        |
+|--------------|--------------------------------------------------------------------------------|
+| `DETAIL.CS`  | Parameterized detail report. Accepts optional `PARAM.category`. Publishable.   |
+| `SUMMARY.CS` | Aggregates state counts + dollar totals. Consumed by the weekly schedule.      |
 
-| Program | Purpose |
-|---------|---------|
-| DASHBOARD.CS | Category spending breakdown (uses /query pivot) |
-| MONTHLY.CS | Monthly cross-tabulation (uses /query pivot) |
-| DETAIL.CS | Parameterized detail report (accepts category, month) |
-| SUMMARY.CS | Weekly summary for email notifications |
+**No `DASHBOARD.CS` or `MONTHLY.CS`.** The earlier build shipped those as stub programs that just `PRINT`ed a one-line reminder to use `/query` pivot — which exactly the thing the frontend already does. Publishing a stub as a public report is worse than not having it, so both are deleted.
 
-## API Endpoints (Proxy)
+## Quick start
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/query` | POST | Query expenses with filters, aggregation, pivot |
-| `/api/insert` | POST | Create new expense |
-| `/api/update` | POST | Update existing expense |
-| `/api/delete` | POST | Delete expense |
-| `/api/export-report` | POST | Generate and download report |
-| `/api/category-breakdown` | POST | Get category pivot data |
-| `/api/monthly-crosstab` | POST | Get monthly cross-tabulation |
+### Browse the live app
 
-## Key Chaprola Concepts Demonstrated
+Open <https://chaprola.org/apps/chaprola-expenses/expenses/>. The dashboard loads ~70 seed expenses across three months and you can immediately add, edit, review, and export.
 
-### 1. Pivot as GROUP BY
+### Fork and deploy your own
 
-```javascript
-POST /query {
-  file: "ledger",
-  pivot: {
-    row: "category",
-    values: [
-      { field: "amount", function: "sum" },
-      { field: "amount", function: "count" }
-    ]
-  }
-}
-```
-
-### 2. Monthly Cross-Tabulation
-
-```javascript
-POST /query {
-  file: "ledger",
-  pivot: {
-    row: "category",
-    column: "month",
-    values: [{ field: "amount", function: "sum" }],
-    totals: true,
-    grand_total: true
-  }
-}
-```
-
-### 3. Export Pipeline
-
-```
-Compile → Publish → Export-Report → Download
-```
-
-### 4. Parameterized Reports
-
-```
-/report?userid=chaprola-expenses&project=expenses&name=DETAIL&category=Travel
-```
-
-## Seed Data
-
-The setup script imports 70 realistic expenses across January-March 2026:
-
-- **Total**: ~$38,245
-- **Categories**: 9 (Marketing highest at ~$6,380)
-- **Submitters**: 5 team members
-- **Status**: 64 approved, 6 pending
-
-## Documentation
-
-- [COOKBOOK.md](./COOKBOOK.md) - Chaprola patterns and examples
-- [LESSONS.md](./LESSONS.md) - Development insights and gotchas
+1. **Clone the repo:** `git clone https://github.com/cletcher/chaprola-expenses.git`
+2. **Register** a Chaprola account (via `chaprola_register` or the signup flow on chaprola.org). Save the admin key (`chp_...`) in a local `.env` (this file is `.gitignore`-d).
+3. **Bootstrap** the backend from the repo:
+   ```
+   export CHAPROLA_API_KEY=chp_your_key_here
+   node setup-chaprola.js
+   ```
+   This imports the seed ledger, widens the tight fields via `/alter`, compiles `DETAIL.CS` and `SUMMARY.CS`, uploads their `.DS` intent files, and publishes `DETAIL` as a public report.
+4. **Create a site key** for the frontend (via `chaprola_create_site_key`). The `allowed_origins` must be the exact scheme+host of where you'll serve the app (e.g. `https://chaprola.org`) — path patterns do not work against browser `Origin` headers. See `LESSONS.md`.
+5. **Drop the site key** into `frontend/app.js` (the `SITE_KEY` constant at the top).
+6. **Deploy the frontend:**
+   ```
+   tar czf /tmp/frontend.tar.gz -C frontend .
+   # Upload via chaprola_app_deploy_inline or the /app/deploy/inline endpoint.
+   ```
+7. **(Optional)** schedule the weekly summary:
+   ```
+   POST /schedule {
+     name: "weekly-summary",
+     cron: "0 9 * * 1",
+     endpoint: "/report",
+     body: { project: "expenses", name: "SUMMARY", primary_file: "ledger" }
+   }
+   ```
 
 ## License
 
-MIT
+MIT.

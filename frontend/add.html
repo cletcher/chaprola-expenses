@@ -16,6 +16,7 @@
       <li><a href="index.html">Dashboard</a></li>
       <li><a href="add.html" class="active">Add Expense</a></li>
       <li><a href="list.html">Expense List</a></li>
+      <li><a href="review.html">Review Pending</a></li>
       <li><a href="export.html">Export</a></li>
     </ul>
   </nav>
@@ -27,7 +28,7 @@
     </header>
 
     <section>
-      <form class="form-container" onsubmit="submitExpense(event)">
+      <form id="addExpenseForm" class="form-container">
         <div class="form-row">
           <div class="form-group">
             <label for="amount">Amount *</label>
@@ -92,9 +93,5 @@
   </main>
 
   <script src="app.js"></script>
-  <script>
-    // Set default date to today
-    document.getElementById('date').valueAsDate = new Date();
-  </script>
 </body>
 </html>

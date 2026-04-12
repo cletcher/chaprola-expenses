@@ -1,352 +1,228 @@
-# Chaprola Expenses Cookbook
+# Chaprola Expenses — Cookbook
 
-This cookbook documents the key Chaprola patterns demonstrated in this expense tracking application.
-
-## 1. Pivot as GROUP BY
-
-Chaprola doesn't have SQL, but its `pivot` feature in `/query` provides equivalent functionality to `GROUP BY` with aggregations.
-
-### Category Spending Breakdown
-
-**SQL equivalent:**
-```sql
-SELECT category, SUM(amount), COUNT(*)
-FROM ledger
-GROUP BY category
-ORDER BY SUM(amount) DESC
-```
-
-**Chaprola:**
-```javascript
-POST /query {
-  userid: "chaprola-expenses",
-  project: "expenses",
-  file: "ledger",
-  pivot: {
-    row: "category",
-    values: [
-      { field: "amount", function: "sum" },
-      { field: "amount", function: "count" }
-    ],
-    totals: true  // Include grand total row
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "records": [
-    { "category": "Marketing", "amount_sum": 6380.00, "amount_count": 9 },
-    { "category": "Equipment", "amount_sum": 9056.00, "amount_count": 7 },
-    ...
-  ],
-  "totals": { "amount_sum": 38245.74, "amount_count": 70 }
-}
-```
-
-### Supported Aggregation Functions
-
-| Function | Description |
-|----------|-------------|
-| `count` | Number of records |
-| `sum` | Sum of numeric values |
-| `avg` | Average of numeric values |
-| `min` | Minimum value |
-| `max` | Maximum value |
-| `stddev` | Standard deviation |
+Patterns discovered while building this app. Generic Chaprola reference lives in the main docs (`chaprola://cookbook`, `chaprola://endpoints`, `chaprola://gotchas`); this file only captures what's specific to the expense-tracker showcase.
 
 ---
 
-## 2. Monthly Cross-Tabulation
+## 1. Server-side GROUP BY via `/query` pivot
 
-Cross-tabulation (pivot tables) show data across two dimensions - here, category vs. month.
+The dashboard runs five `/query` calls in parallel (`Promise.all`), each with a different `pivot` to let the backend do the aggregation. No JavaScript rollup loop, no client-side summation of 70 records.
 
-**SQL equivalent:**
-```sql
-SELECT category,
-  SUM(CASE WHEN month = '2026-01' THEN amount ELSE 0 END) as jan,
-  SUM(CASE WHEN month = '2026-02' THEN amount ELSE 0 END) as feb,
-  SUM(CASE WHEN month = '2026-03' THEN amount ELSE 0 END) as mar,
-  SUM(amount) as total
-FROM ledger
-GROUP BY category
+```js
+// Total amount by state (approved / pending / rejected)
+pivot: { row: 'state', column: '', value: 'amount', aggregate: 'sum' }
+
+// Record count by state
+pivot: { row: 'state', column: '', value: 'state', aggregate: 'count' }
+
+// Total amount by category
+pivot: { row: 'category', column: '', value: 'amount', aggregate: 'sum' }
+
+// Record count by category
+pivot: { row: 'category', column: '', value: 'category', aggregate: 'count' }
+
+// Cross-tab: category × month, summed dollars
+pivot: { row: 'category', column: 'txmonth', value: 'amount', aggregate: 'sum' }
 ```
 
-**Chaprola:**
-```javascript
-POST /query {
-  userid: "chaprola-expenses",
-  project: "expenses",
-  file: "ledger",
-  pivot: {
-    row: "category",      // Rows: one per category
-    column: "month",       // Columns: one per month value
-    values: [
-      { field: "amount", function: "sum" }
-    ],
-    totals: true,          // Row totals
-    grand_total: true      // Column totals + grand total
-  }
-}
-```
+### Response shape (not what the docs imply)
 
-**Response:**
+The real shape of a `/query` pivot response is a **matrix**, not a records array:
+
 ```json
-{
-  "records": [
-    {
-      "category": "Marketing",
-      "2026-01": 1300.00,
-      "2026-02": 2770.00,
-      "2026-03": 3160.00,
-      "_total": 6380.00
-    },
-    ...
-  ],
-  "column_totals": {
-    "2026-01": 9225.99,
-    "2026-02": 10169.80,
-    "2026-03": 18849.95
-  },
-  "grand_total": 38245.74
+"pivot": {
+  "rows": ["approved", "pending"],
+  "columns": [""],
+  "values": [[27150.44], [5400.0]],
+  "row_totals": [27150.44, 5400.0],
+  "column_totals": [32550.44]
 }
 ```
+
+For the category × month cross-tab, `columns` is `["2026-01", "2026-02", "2026-03"]` and `values[i][j]` is the cell for row `i` and column `j`. `row_totals[i]` is the sum across that row; `column_totals[j]` is the sum down that column. Grand total is not a separate field — sum `column_totals` client-side if you want it.
+
+Older examples (including ones in this project's earlier `COOKBOOK.md`) showed `records[{category: "X", amount_sum: N}]` — that shape does not exist in the response today.
+
+### Multi-aggregate pivots don't exist
+
+There is no way to get both SUM and COUNT out of a single pivot call. `value` can be a string or array, but `aggregate` is a single function and applies to every value. If you want both, you call `/query` twice — once with `aggregate: "sum"` and once with `aggregate: "count"`. The dashboard's five pivot calls include two pairs for this reason.
 
 ---
 
-## 3. Scheduled Reports
+## 2. Parameterized detail report (`DETAIL.CS`)
 
-Chaprola supports cron-based scheduling for automated report generation.
+`DETAIL` is the only publishable Chaprola program this app ships. It produces pipe-delimited output, optionally filtered to a single category.
 
-### Weekly Expense Summary Email
+```chaprola
+// DETAIL.CS — Expense detail report
 
-```javascript
+MOVE PARAM.category U.200 24
+IF BLANK U.200 24 GOTO 200
+QUERY ledger INTO results WHERE category EQ PARAM.category ORDER BY txdate DESC
+GOTO 300
+
+200 QUERY ledger INTO results WHERE expensecode NE "" ORDER BY txdate DESC
+
+300 PRINT "DATE|CATEGORY|COMPANY|DETAIL|AMOUNT|STATE|SUBMITTER"
+
+LET rec = 1
+
+400 READ results rec
+    IF EOF END
+    PRINT results.txdate + "|" + results.category + "|" + results.company + "|" + results.detail + "|" + results.amount + "|" + results.state + "|" + results.submitter
+    LET rec = rec + 1
+    GOTO 400
+```
+
+### Gotchas
+
+- **`IF BLANK PARAM.category GOTO 200`** fails to compile. `IF BLANK` accepts `P.field` and `U.location` addressing, but not `PARAM.*`. Stage the param into a U-location first (`MOVE PARAM.category U.200 24`) and then `IF BLANK U.200 24`.
+- **`QUERY ledger ORDER BY txdate DESC`** (no `WHERE`) fails with `QUERY requires WHERE`. Use a tautology: `WHERE expensecode NE ""`.
+- **`PARAM.category` matches records with a blank `category` field** when the caller omits it — not "all records". That's why the program branches to a separate `QUERY` statement for the no-param case.
+
+Call it via `/report?userid=chaprola-expenses&project=expenses&name=DETAIL&category=Travel` (or any other category), or via `POST /run` with `params: { category: "Travel" }`. Both work for reads; `/report` is public and doesn't need auth, `/run` works with a site key.
+
+---
+
+## 3. Weekly summary via `/schedule` + `SUMMARY.CS`
+
+`SUMMARY.CS` splits the ledger into approved and pending subsets and reports counts + dollar totals. It's 30 lines, all idiomatic style-guide syntax.
+
+```chaprola
+QUERY ledger INTO approved_set WHERE state EQ "approved"
+QUERY ledger INTO pending_set WHERE state EQ "pending"
+
+LET approved_total = 0
+LET rec = 1
+
+100 READ approved_set rec
+    IF EOF GOTO 200
+    GET R10 FROM approved_set.amount
+    LET approved_total = approved_total + R10
+    LET rec = rec + 1
+    GOTO 100
+
+200 LET pending_total = 0
+    LET rec = 1
+
+300 READ pending_set rec
+    IF EOF GOTO 400
+    GET R10 FROM pending_set.amount
+    LET pending_total = pending_total + R10
+    LET rec = rec + 1
+    GOTO 300
+
+400 PRINT "WEEKLY EXPENSE SUMMARY"
+    PRINT "Approved: " + approved_set.RECORDCOUNT + " expenses, $" + approved_total
+    PRINT "Pending:  " + pending_set.RECORDCOUNT + " expenses, $" + pending_total
+```
+
+### Gotchas
+
+- **`GET amt FROM approved_set.amount`** fails with `GET requires an R-variable`, even though style rule #3 says to avoid `DEFINE VARIABLE`. The workaround is to use an explicit R-slot (`GET R10 FROM approved_set.amount`) and reuse it in the immediately-following `LET`.
+- **Accumulating while iterating a QUERY result** works — `approved_total = approved_total + R10` inside the `READ` loop accumulates correctly across iterations.
+- **`approved_set.RECORDCOUNT`** gives the count of matched rows without needing a separate counter.
+
+### Scheduling it
+
+```js
 POST /schedule {
   userid: "chaprola-expenses",
   name: "weekly-summary",
-  cron: "0 9 * * MON",  // Every Monday at 9 AM
-  endpoint: "/export-report",
-  body: {
-    project: "expenses",
-    name: "SUMMARY",
-    primary_file: "ledger",
-    format: "text"
-  },
-  skip_if_unchanged: false
+  cron: "0 9 * * 1",          // Monday 09:00 UTC
+  endpoint: "/report",
+  body: { project: "expenses", name: "SUMMARY", primary_file: "ledger" }
 }
 ```
 
-### Monthly PDF Report
-
-```javascript
-POST /schedule {
-  userid: "chaprola-expenses",
-  name: "monthly-pdf",
-  cron: "0 6 1 * *",  // 1st of each month at 6 AM
-  endpoint: "/export-report",
-  body: {
-    project: "expenses",
-    name: "MONTHLY",
-    primary_file: "ledger",
-    format: "pdf",
-    title: "Monthly Expense Report"
-  }
-}
-```
-
-### Schedule Management
-
-```javascript
-// List all schedules
-POST /schedule/list { userid: "chaprola-expenses" }
-
-// Delete a schedule
-POST /schedule/delete {
-  userid: "chaprola-expenses",
-  name: "weekly-summary"
-}
-```
+The scheduler invokes the target endpoint on the cron, captures the response in the schedule run history, and stores a hash for `skip_if_unchanged` comparisons. It does **not** pipe the output into `/email/send` — that would need a platform feature (templating in the schedule body, or a new "run-then-email" endpoint) that doesn't exist yet. For now, `POST /schedule/list` shows the last run's captured output.
 
 ---
 
-## 4. Export Pipeline
+## 4. Origin-locked site keys (the pattern that actually works)
 
-The export workflow demonstrates Chaprola's compile-run-export cycle.
+For a static frontend that needs to write via `/insert-record` and `/update-record`, you need a site key. The key's `allowed_origins` must match the browser's `Origin` header, which is always scheme + host + port — **never** a path.
 
-### Step 1: Compile Program
-
-```javascript
-POST /compile {
+```js
+POST /create-site-key {
   userid: "chaprola-expenses",
-  project: "expenses",
-  name: "DETAIL",
-  source: `
-    // DETAIL.CS - Expense detail report
-    DEFINE VARIABLE rec R41
-    LET rec = 1
-    100 SEEK rec
-        IF EOF GOTO 900
-        MOVE P.date U.1 10
-        MOVE P.category U.12 20
-        MOVE P.vendor U.33 30
-        GET amt FROM P.amount
-        PUT amt INTO U.64 12 D 2
-        PRINT 0
-        LET rec = rec + 1
-        GOTO 100
-    900 END
-  `,
-  primary_format: "ledger"
+  label: "expenses-frontend",
+  allowed_origins: ["https://chaprola.org"],    // scheme + host only
+  allowed_endpoints: [
+    "/query", "/insert-record", "/update-record", "/export-report", "/report"
+  ]
 }
 ```
 
-### Step 2: Publish for Access
+Path patterns like `"https://chaprola.org/apps/.../*"` **do not work** against browser requests — the backend's `origin_matches` does a `starts_with` comparison and a browser `Origin` is shorter than a path prefix, so the match always fails. See `LESSONS.md` #1 for the full story.
 
-```javascript
-POST /publish {
-  userid: "chaprola-expenses",
-  project: "expenses",
-  name: "DETAIL",
-  primary_file: "ledger",
-  acl: "public"  // or "authenticated", "owner", "token"
-}
-```
-
-### Step 3: Export to Format
-
-```javascript
-POST /export-report {
-  userid: "chaprola-expenses",
-  project: "expenses",
-  name: "DETAIL",
-  primary_file: "ledger",
-  format: "pdf",    // csv, json, xlsx, text, pdf
-  title: "Q1 2026 Expense Report"
-}
-// Response: { files_written: ["DETAIL.R"], ... }
-```
-
-### Step 4: Download File
-
-```javascript
-POST /download {
-  userid: "chaprola-expenses",
-  project: "expenses",
-  file: "DETAIL.R",
-  type: "output"
-}
-// Response: { download_url: "https://s3.../...", expires_in: 3600 }
-```
-
-### Supported Export Formats
-
-| Format | Extension | Use Case |
-|--------|-----------|----------|
-| `csv` | .csv | Spreadsheet import, data analysis |
-| `json` | .json | API integrations, data transfer |
-| `xlsx` | .xlsx | Microsoft Excel workbooks |
-| `pdf` | .pdf | Formal reports, printing |
-| `text` | .txt | Plain text output |
+`/download` and `/delete-record` are always rejected for site keys regardless of `allowed_endpoints` — those require a full admin key. This app avoids both: exports are generated client-side from a `/query` response, and deletes are done via `/update-record` setting `state` to `rejected` (a soft-delete that the Review page drives).
 
 ---
 
-## 5. Parameterized Reports
+## 5. Client-side CSV/JSON export from `/query`
 
-Reports can accept query parameters for filtering.
+The Export page skips `/export-report` entirely and builds the download in the browser:
 
-### Define Parameters in Program
+```js
+const data = await api('/query', {
+  file: 'ledger',
+  where: [{ field: 'txdate', op: 'ge', value: startDate },
+          { field: 'txdate', op: 'le', value: endDate }],
+  order_by: [{ field: 'txdate', dir: 'asc' }]
+});
 
-```chaprola
-// DETAIL.CS with parameters
-// Accepts: ?category=Travel&month=2026-01
+const records = data.records;
+const columns = ['txdate', 'category', 'company', 'detail', 'amount', 'state', 'submitter'];
 
-MOVE P.category U.100 30
-IF EQUAL "" PARAM.category GOTO 150    // No filter = show all
-IF EQUAL PARAM.category U.100 GOTO 150 // Match = show
-GOTO 300                                // No match = skip
+const csv = [columns.join(','), ...records.map(r => columns.map(c => escapeCell(r[c])).join(','))].join('\n');
 
-150 MOVE P.month U.100 7
-    IF EQUAL "" PARAM.month GOTO 200
-    IF EQUAL PARAM.month U.100 GOTO 200
-    GOTO 300
-
-200 // Output record
-    MOVE P.date U.1 10
-    ...
+const blob = new Blob([csv], { type: 'text/csv' });
+const url = URL.createObjectURL(blob);
+const a = Object.assign(document.createElement('a'), { href: url, download: 'expenses.csv' });
+a.click();
+URL.revokeObjectURL(url);
 ```
 
-### Call with Parameters
-
-**Via /report endpoint:**
-```
-GET /report?userid=chaprola-expenses&project=expenses&name=DETAIL&category=Travel&month=2026-01
-```
-
-**Via /run with R-variables:**
-```javascript
-POST /run {
-  userid: "chaprola-expenses",
-  project: "expenses",
-  name: "DETAIL",
-  primary_file: "ledger",
-  params: {
-    category: "Travel",
-    month: "2026-01"
-  }
-}
-```
-
-### Discover Available Parameters
-
-```javascript
-POST /report/params {
-  userid: "chaprola-expenses",
-  project: "expenses",
-  name: "DETAIL"
-}
-// Response: .PF schema with field names, types, widths
-```
+Why not `/export-report`? The backend's text-to-CSV conversion mangles fixed-width field boundaries — see `LESSONS.md` #4. For the V1 showcase, doing it client-side is faster, reliable, and produces identical output.
 
 ---
 
-## Quick Reference
+## Quick reference
 
-### Data Lifecycle
+### WHERE shape varies by endpoint
 
-```
-Import JSON  →  Index Fields  →  Compile Programs  →  Publish Reports
-    ↓               ↓                   ↓                    ↓
- /import        /index            /compile              /publish
-                                      ↓
-                                   /run or /report
-                                      ↓
-                               /export-report
-                                      ↓
-                                 /download
+```js
+// /query — array of condition objects
+where: [{ field: "state", op: "eq", value: "pending" }]
+
+// /update-record, /delete-record — plain object
+where: { expensecode: "EXP-..." }
 ```
 
-### Common Query Patterns
+### Order-by shape (docs lie)
 
-```javascript
-// Simple filter
-{ file: "ledger", where: { status: { eq: "pending" } } }
+```js
+// Docs say this works. It does not.
+order_by: "txdate desc"
 
-// Multiple conditions (AND)
-{ file: "ledger", where: [
-  { field: "status", op: "eq", value: "approved" },
-  { field: "amount", op: "gt", value: 500 }
-]}
-
-// Select specific fields
-{ file: "ledger", select: ["date", "vendor", "amount"] }
-
-// Order by multiple fields
-{ file: "ledger", order_by: [
-  { field: "date", dir: "desc" },
-  { field: "amount", dir: "desc" }
-]}
-
-// Pagination
-{ file: "ledger", limit: 20, offset: 40 }
+// This is what the parser accepts today.
+order_by: [{ field: "txdate", dir: "desc" }]
 ```
+
+### Field widths for this project
+
+```
+expensecode  20
+amount       12
+category     24
+company      60
+detail       40
+txdate       10
+txmonth       7
+method       14
+state         8
+submitter    40
+```
+
+Initially Chaprola auto-sized `expensecode` to 12 and `amount` to 7, both of which are too tight — new records with millisecond-precision IDs would truncate, and any amount ≥ 10000 would silently lose the leading digit. This app widens them via `/alter` at setup time; the bootstrap script handles this automatically.

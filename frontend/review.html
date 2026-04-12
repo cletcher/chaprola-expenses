@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Review Pending - Chaprola Expenses</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="logo">
+      <h1>Chaprola</h1>
+      <span>Expenses</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="index.html">Dashboard</a></li>
+      <li><a href="add.html">Add Expense</a></li>
+      <li><a href="list.html">Expense List</a></li>
+      <li><a href="review.html" class="active">Review Pending</a></li>
+      <li><a href="export.html">Export</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+    <header class="page-header">
+      <h2>Review Pending Expenses</h2>
+      <p class="subtitle" id="pendingCountLabel">Loading...</p>
+    </header>
+
+    <section>
+      <table class="data-table" id="reviewTable">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Category</th>
+            <th>Company</th>
+            <th>Detail</th>
+            <th>Amount</th>
+            <th>Submitter</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="7" class="loading">
+              <span class="spinner"></span> Loading pending expenses...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
