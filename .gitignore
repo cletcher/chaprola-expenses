@@ -20,3 +20,5 @@ Thumbs.db
 *.swo
 .idea/
 .vscode/
+.mcp.json
+*.local
