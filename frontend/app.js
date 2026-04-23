@@ -121,11 +121,21 @@ async function loadDashboard() {
     // Five parallel pivots. All aggregation happens server-side in Chaprola's
     // /query pivot — this is the whole point of the app: "GROUP BY on a
     // database I didn't have to provision."
+    //
+    // Architectural note: the dashboard uses /query pivot (interactive,
+    // low-latency, real-time); SUMMARY.CS + DETAIL.CS are the scheduled-
+    // report + ad-hoc-export programs running off /report + /export-report.
+    // Both paths are server-side aggregation — they just serve different
+    // call-sites with different latency/shape requirements.
+    //
     // Every /query scopes by the current user_id so pivots only aggregate
     // the caller's expenses. Anonymous/logged-out view pivots demo-user.
     const pivotBody = (p) => ({
       file: 'ledger',
-      where: [{ field: 'user_id', op: 'eq', value: currentUserId() }],
+      where: [
+        { field: 'user_id', op: 'eq', value: currentUserId() },
+        { field: 'state', op: 'ne', value: 'deleted' }
+      ],
       pivot: p
     });
     const [stateSums, stateCounts, catSums, catCounts, monthly] = await Promise.all([
@@ -334,7 +344,10 @@ async function loadExpenseList() {
 
     const data = await api('/query', {
       file: 'ledger',
-      where: [{ field: 'user_id', op: 'eq', value: currentUserId() }],
+      where: [
+        { field: 'user_id', op: 'eq', value: currentUserId() },
+        { field: 'state', op: 'ne', value: 'deleted' }
+      ],
       order_by: [{ field: 'txdate', dir: 'desc' }]
     });
 
@@ -477,6 +490,29 @@ function closeModal() {
   document.getElementById('editModal').classList.remove('active');
 }
 
+// Soft-delete: site keys are platform-blocked from /delete-record, so
+// we mark state='deleted' and exclude it from every downstream query,
+// dashboard pivot, review queue, and DETAIL/SUMMARY CS program. From
+// the user's perspective the expense disappears. Physically removing
+// on /consolidate later would require a chp_owner_ cleanup path.
+async function deleteExpense() {
+  const expensecode = document.getElementById('editExpenseId').value;
+  if (!expensecode) return;
+  if (!confirm('Delete this expense? This cannot be undone.')) return;
+  try {
+    await api('/update-record', {
+      file: 'ledger',
+      where: { expensecode },
+      set: { state: 'deleted' }
+    });
+    closeModal();
+    showSuccess('Expense deleted');
+    loadExpenseList();
+  } catch (err) {
+    showError(`Failed to delete: ${err.message}`);
+  }
+}
+
 async function saveExpense(event) {
   event.preventDefault();
   try {
@@ -601,20 +637,46 @@ async function exportData() {
   btn.textContent = 'Generating...';
 
   try {
-    // Build a WHERE clause for the date range when the caller provides one.
-    // Chaprola /query WHERE is an array of {field, op, value} objects.
-    const where = [];
-    if (startDate) where.push({ field: 'txdate', op: 'ge', value: startDate });
-    if (endDate) where.push({ field: 'txdate', op: 'le', value: endDate });
+    // Server-side export path: /report?name=DETAIL runs DETAIL.CS which
+    // is scoped WHERE user_id EQ PARAM.user_id. The previous /query
+    // path omitted the user_id filter and leaked every user's expenses
+    // to any logged-in caller — this is the fix.
+    const qs = new URLSearchParams({
+      userid: USERID,
+      project: PROJECT,
+      name: 'DETAIL',
+      user_id: currentUserId()
+    }).toString();
+    const doFetch = window.chaprolaAuth && window.chaprolaAuth.fetch
+      ? window.chaprolaAuth.fetch.bind(window.chaprolaAuth)
+      : fetch;
+    const resp = await doFetch(`${API_BASE}/report?${qs}`);
+    if (!resp.ok) throw new Error(`DETAIL report failed (${resp.status})`);
+    const text = await resp.text();
 
-    const body = {
-      file: 'ledger',
-      order_by: [{ field: 'txdate', dir: 'asc' }]
-    };
-    if (where.length) body.where = where;
-
-    const data = await api('/query', body);
-    const records = data.records || [];
+    // Parse pipe-delimited DETAIL output. Header: DATE|CATEGORY|COMPANY|
+    // DETAIL|AMOUNT|STATE|SUBMITTER. Map to the record field names the
+    // downstream CSV/JSON converters expect.
+    const lines = text.trim().split('\n').filter(l => l.trim());
+    let records = [];
+    if (lines.length > 1) {
+      for (let i = 1; i < lines.length; i++) {
+        const p = lines[i].split('|');
+        records.push({
+          txdate: (p[0] || '').trim(),
+          category: (p[1] || '').trim(),
+          company: (p[2] || '').trim(),
+          detail: (p[3] || '').trim(),
+          amount: (p[4] || '').trim(),
+          state: (p[5] || '').trim(),
+          submitter: (p[6] || '').trim()
+        });
+      }
+    }
+    // Client-side date filter — always against records the server
+    // already scoped to the caller, so no leak risk here.
+    if (startDate) records = records.filter(r => r.txdate >= startDate);
+    if (endDate) records = records.filter(r => r.txdate <= endDate);
     if (records.length === 0) {
       showError('No expenses match the selected date range.');
       return;
@@ -697,6 +759,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (modalClose) modalClose.addEventListener('click', closeModal);
   const modalCancel = document.getElementById('editModalCancel');
   if (modalCancel) modalCancel.addEventListener('click', closeModal);
+  const modalDelete = document.getElementById('editModalDelete');
+  if (modalDelete) modalDelete.addEventListener('click', deleteExpense);
   const modalOverlay = document.getElementById('editModal');
   if (modalOverlay) {
     modalOverlay.addEventListener('click', (e) => {
