@@ -263,13 +263,17 @@
     <section>
       <h3>How it works</h3>
       <div class="alert alert-info">
-        This page issues a single <code>POST /query</code> to <code>api.chaprola.org</code> with the date-range filter and serializes the result in the browser.
-        CSV and JSON are built client-side and delivered via a blob URL &mdash; no server conversion, no download URL round-trip.
-        The dedicated <code>DETAIL.CS</code> program (a parameterized detail report) is still available for direct <code>GET /report?name=DETAIL&amp;category=Travel</code> consumption.
+        This page calls <code>GET /report?name=DETAIL&amp;user_id=...</code> against <code>DETAIL.CS</code>,
+        a published Chaprola program that filters by <code>user_id</code> server-side
+        (WHERE <code>user_id EQ PARAM.user_id AND state NE "deleted"</code>) and emits
+        pipe-delimited rows. The date range is applied client-side against already-scoped
+        results, then CSV or JSON is assembled and delivered via a blob URL. The server-side
+        filter keeps one user's expenses invisible to another's export requests even if the
+        date-range UI isn't used.
       </div>
     </section>
   </main>
 
-  <script src="app.js?v=20260423-final"></script>
+  <script src="app.js?v=20260423-r2"></script>
 </body>
 </html>
