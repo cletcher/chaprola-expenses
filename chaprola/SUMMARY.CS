@@ -1,10 +1,11 @@
-// SUMMARY.CS — Weekly expense summary for email
-// Splits the ledger into approved and pending subsets via QUERY, then
-// iterates each subset to compute dollar totals alongside counts. Output
-// is a short plain-text report suitable for a weekly email body.
+// SUMMARY.CS — Weekly expense summary for the caller
+// Multi-user: scoped by PARAM.user_id (from chp_user_ token or passed
+// explicitly by anonymous /report callers as 'demo-user').
+// Splits the ledger into approved and pending subsets for this user,
+// then iterates each to compute dollar totals alongside counts.
 
-QUERY ledger INTO approved_set WHERE state EQ "approved"
-QUERY ledger INTO pending_set WHERE state EQ "pending"
+QUERY ledger INTO approved_set WHERE user_id EQ PARAM.user_id AND state EQ "approved"
+QUERY ledger INTO pending_set  WHERE user_id EQ PARAM.user_id AND state EQ "pending"
 
 LET approved_total = 0
 LET rec = 1

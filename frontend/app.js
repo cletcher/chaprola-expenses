@@ -15,6 +15,16 @@ const API_BASE = 'https://api.chaprola.org';
 const SITE_KEY = 'site_aa64a450feb5139c4607cb7c3ebd8011a78952a433d42213fffb33b8843c5f1c';
 const USERID = 'chaprola-expenses';
 const PROJECT = 'expenses';
+const DEMO_USER_ID = 'demo-user';
+
+function currentUserId() {
+  const u = window.chaprolaAuth && window.chaprolaAuth.getUser();
+  return (u && u.sub) || DEMO_USER_ID;
+}
+
+function isLoggedIn() {
+  return !!(window.chaprolaAuth && window.chaprolaAuth.getUser());
+}
 
 const CATEGORY_COLORS = {
   'Software & Subscriptions': 'software',
@@ -111,7 +121,13 @@ async function loadDashboard() {
     // Five parallel pivots. All aggregation happens server-side in Chaprola's
     // /query pivot — this is the whole point of the app: "GROUP BY on a
     // database I didn't have to provision."
-    const pivotBody = (p) => ({ file: 'ledger', pivot: p });
+    // Every /query scopes by the current user_id so pivots only aggregate
+    // the caller's expenses. Anonymous/logged-out view pivots demo-user.
+    const pivotBody = (p) => ({
+      file: 'ledger',
+      where: [{ field: 'user_id', op: 'eq', value: currentUserId() }],
+      pivot: p
+    });
     const [stateSums, stateCounts, catSums, catCounts, monthly] = await Promise.all([
       api('/query', pivotBody({ row: 'state', column: '', value: 'amount', aggregate: 'sum' })),
       api('/query', pivotBody({ row: 'state', column: '', value: 'state', aggregate: 'count' })),
@@ -282,7 +298,8 @@ async function submitExpense(event) {
       txmonth: txdate.substring(0, 7),
       method: formData.get('method'),
       state: 'pending',
-      submitter: formData.get('submitter') || 'Web User'
+      submitter: formData.get('submitter') || 'Web User',
+      user_id: currentUserId()
     };
 
     await api('/insert-record', { file: 'ledger', record });
@@ -317,6 +334,7 @@ async function loadExpenseList() {
 
     const data = await api('/query', {
       file: 'ledger',
+      where: [{ field: 'user_id', op: 'eq', value: currentUserId() }],
       order_by: [{ field: 'txdate', dir: 'desc' }]
     });
 
@@ -494,7 +512,10 @@ async function loadReviewList() {
   try {
     const data = await api('/query', {
       file: 'ledger',
-      where: [{ field: 'state', op: 'eq', value: 'pending' }],
+      where: [
+        { field: 'user_id', op: 'eq', value: currentUserId() },
+        { field: 'state', op: 'eq', value: 'pending' }
+      ],
       order_by: [{ field: 'txdate', dir: 'desc' }]
     });
     renderReviewList(data.records || []);
